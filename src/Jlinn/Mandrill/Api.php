@@ -7,8 +7,10 @@
 
 namespace Jlinn\Mandrill;
 
-use Guzzle\Http\Client;
-use Guzzle\Http\Exception\ServerErrorResponseException;
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Exception\ServerException;
 use Jlinn\Mandrill\Exception\APIException;
 
 abstract class Api{
@@ -40,6 +42,14 @@ abstract class Api{
     }
 
     /**
+     * Set and Handlerstack for testing purposes.
+     * @param string $url
+     */
+    public function setHandler(HandlerStack $handler){
+        $this->handler = $handler;
+    }
+
+    /**
      * Send a request to Mandrill. All requests are sent via HTTP POST.
      * @param string $url
      * @param array $body
@@ -51,16 +61,24 @@ abstract class Api{
         if(isset($this->baseUrl)){
             $baseUrl = $this->baseUrl;
         }
-        $client = new Client($baseUrl);
+
+        if(isset($this->handler)) {
+            $client = new Client(array('handler' => $this->handler));
+        } else {
+            $client = new Client(array('base_uri' => $baseUrl));
+        }
+
         $body['key'] = $this->apiKey;
         $section = explode('\\', get_called_class());
         $section = strtolower(end($section));
-        $request = $client->post($section.'/'.$url.'.json', NULL, $body);
+
+        $request = new Request('POST', $section.'/'.$url.'.json', array(), json_encode($body));
+
         try{
-            $response = $request->send();
+            $response = $client->send($request);
             $response = $response->getBody();
         }
-        catch(ServerErrorResponseException $e){
+        catch(ServerException $e){
             $response = json_decode($e->getResponse()->getBody(), true);
             throw new APIException($response['message'], $response['code'], $response['status'], $response['name'], $e);
         }
